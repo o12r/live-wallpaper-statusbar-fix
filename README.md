@@ -66,6 +66,10 @@
 
 没有 `keystore.properties` 时，会用调试密钥签名。
 
+### 许可
+
+[MIT](LICENSE)
+
 ---
 
 ## English
@@ -129,3 +133,7 @@ Requires JDK 21 and the Android SDK. The Xposed API comes from compile-only stub
 ```
 
 Without a `keystore.properties`, release builds are signed with the debug key.
+
+### License
+
+[MIT](LICENSE)

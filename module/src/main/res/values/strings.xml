@@ -18,6 +18,19 @@
     <string name="invalid_color">Not a valid color</string>
     <string name="save">Save</string>
     <string name="saved">Settings saved</string>
+    <string name="section_theme">Theme</string>
+    <string name="theme_system">Follow system</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_black">True black (AMOLED)</string>
+    <string name="update_check">Check for updates</string>
+    <string name="update_none">Up to date (%1$s)</string>
+    <string name="update_failed">Update failed: %1$s</string>
+    <string name="update_available">Version %1$s is available</string>
+    <string name="update_install">Download &amp; install</string>
+    <string name="update_later">Later</string>
+    <string name="update_downloading">Downloading update…</string>
+    <string name="framework_inactive">LSPosed is not active for this module: settings will not reach the launcher or System UI.</string>
 
     <string-array name="xposed_scope">
         <item>com.zte.mifavor.launcher</item>

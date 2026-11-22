@@ -22,8 +22,6 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import de.robv.android.xposed.XSharedPreferences;
-
 /**
  * Lets the user customize every color this module can apply, instead of the hard-coded
  * black/white (and ZTE's 65% black) this project started with. Values are written to a plain
@@ -35,10 +33,20 @@ public class SettingsActivity extends Activity {
     private SharedPreferences prefs;
     private RadioGroup homeModeGroup;
 
+    static final int THEME_SYSTEM = 0, THEME_LIGHT = 1, THEME_DARK = 2, THEME_BLACK = 3;
+    private SharedPreferences ui;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        ui = getSharedPreferences("ui", MODE_PRIVATE);
+        int theme = ui.getInt("theme", THEME_SYSTEM);
+        boolean nightSystem = (getResources().getConfiguration().uiMode
+                & android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+        boolean dark = theme == THEME_DARK || theme == THEME_BLACK || (theme == THEME_SYSTEM && nightSystem);
+        setTheme(dark ? android.R.style.Theme_DeviceDefault : android.R.style.Theme_DeviceDefault_Light);
         super.onCreate(savedInstanceState);
-        prefs = getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE);
+        prefs = openPrefs();
+        if (theme == THEME_BLACK) getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
 
         ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
@@ -56,6 +64,22 @@ public class SettingsActivity extends Activity {
             return insets;
         });
         scroll.setFitsSystemWindows(true);
+
+        addHeader(root, getString(R.string.section_theme));
+        RadioGroup themeGroup = new RadioGroup(this);
+        addRadio(themeGroup, getString(R.string.theme_system));
+        addRadio(themeGroup, getString(R.string.theme_light));
+        addRadio(themeGroup, getString(R.string.theme_dark));
+        addRadio(themeGroup, getString(R.string.theme_black));
+        root.addView(themeGroup);
+        ((RadioButton) themeGroup.getChildAt(theme)).setChecked(true);
+        themeGroup.setOnCheckedChangeListener((g, id) -> {
+            int picked = g.indexOfChild(g.findViewById(id));
+            if (picked != ui.getInt("theme", THEME_SYSTEM)) {
+                ui.edit().putInt("theme", picked).apply();
+                recreate();
+            }
+        });
 
         addHeader(root, getString(R.string.section_home_status));
         homeModeGroup = new RadioGroup(this);
@@ -103,13 +127,44 @@ public class SettingsActivity extends Activity {
                     .putInt("label_dark", colorOf(labelDark))
                     .putInt("label_light", colorOf(labelLight))
                     .apply();
-            // Without this, the file stays readable only by this app and every hooked process
-            // (launcher, System UI) silently falls back to the defaults — the settings above
-            // would look saved here but never actually apply anywhere.
-            new XSharedPreferences(Settings.PACKAGE, Settings.PREFS_NAME).makeWorldReadable();
+            sendBroadcast(new android.content.Intent(Settings.ACTION_CHANGED));
             Toast.makeText(this, R.string.saved, Toast.LENGTH_SHORT).show();
         });
         root.addView(save);
+
+        Button update = new Button(this);
+        update.setText(R.string.update_check);
+        update.setOnClickListener(v -> new Updater(this).check(true));
+        root.addView(update);
+
+        if (savedInstanceState == null) {
+            if (Updater.ACTION_INSTALL_STATUS.equals(getIntent().getAction())) {
+                Updater.onInstallStatus(this, getIntent());
+            } else {
+                new Updater(this).check(false);
+            }
+        }
+    }
+
+    @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        if (Updater.ACTION_INSTALL_STATUS.equals(intent.getAction())) Updater.onInstallStatus(this, intent);
+    }
+
+    /**
+     * LSPosed/Vector make MODE_WORLD_READABLE work for modules that declare xposedsharedprefs
+     * (the file is moved where hooked apps can read it through XSharedPreferences). Without the
+     * framework active it throws, and the settings can only stay local.
+     */
+    @SuppressWarnings("deprecation")
+    private SharedPreferences openPrefs() {
+        try {
+            return getSharedPreferences(Settings.PREFS_NAME, MODE_WORLD_READABLE);
+        } catch (SecurityException e) {
+            Toast.makeText(this, R.string.framework_inactive, Toast.LENGTH_LONG).show();
+            return getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE);
+        }
     }
 
     private void addRadio(RadioGroup group, String label) {

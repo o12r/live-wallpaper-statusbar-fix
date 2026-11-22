@@ -18,4 +18,17 @@
     <string name="invalid_color">颜色格式不正确</string>
     <string name="save">保存</string>
     <string name="saved">设置已保存</string>
+    <string name="section_theme">主题</string>
+    <string name="theme_system">跟随系统</string>
+    <string name="theme_light">浅色</string>
+    <string name="theme_dark">深色</string>
+    <string name="theme_black">纯黑（AMOLED）</string>
+    <string name="update_check">检查更新</string>
+    <string name="update_none">已是最新版本（%1$s）</string>
+    <string name="update_failed">更新失败：%1$s</string>
+    <string name="update_available">发现新版本 %1$s</string>
+    <string name="update_install">下载并安装</string>
+    <string name="update_later">稍后</string>
+    <string name="update_downloading">正在下载更新…</string>
+    <string name="framework_inactive">本模块未在 LSPosed 中激活：设置无法传递到桌面和系统界面。</string>
 </resources>

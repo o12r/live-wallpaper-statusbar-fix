@@ -11,6 +11,8 @@ import de.robv.android.xposed.XSharedPreferences;
 final class Settings {
     static final String PACKAGE = "com.weworkshop.statusbarfix";
     static final String PREFS_NAME = "settings";
+    /** Broadcast by {@link SettingsActivity} after saving, so hooked processes re-apply colors. */
+    static final String ACTION_CHANGED = PACKAGE + ".SETTINGS_CHANGED";
 
     static final int DEFAULT_DARK = 0xFF000000;
     static final int DEFAULT_LIGHT = 0xFFFFFFFF;

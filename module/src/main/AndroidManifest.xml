@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:description="@string/xposed_description"
         android:icon="@android:drawable/sym_def_app_icon"
@@ -14,7 +17,10 @@
             android:value="@string/xposed_description" />
         <meta-data
             android:name="xposedminversion"
-            android:value="82" />
+            android:value="93" />
+        <meta-data
+            android:name="xposedsharedprefs"
+            android:value="true" />
         <meta-data
             android:name="xposedscope"
             android:resource="@array/xposed_scope" />
@@ -22,6 +28,7 @@
         <activity
             android:name=".SettingsActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:label="@string/settings_title">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

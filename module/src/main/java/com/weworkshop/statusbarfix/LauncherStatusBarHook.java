@@ -2,7 +2,12 @@ package com.weworkshop.statusbarfix;
 
 import android.app.WallpaperColors;
 import android.app.WallpaperManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.res.ColorStateList;
+import android.graphics.Canvas;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
@@ -97,17 +102,59 @@ public class LauncherStatusBarHook implements IXposedHookLoadPackage {
                 int color = (Integer) param.args[0];
                 requestedLabelColors.put(view, color);
                 startWatchingHome(view.getContext());
-                if (homeDarkText != null) {
-                    param.args[0] = homeDarkText ? Settings.labelDark() : Settings.labelLight();
-                }
+                Integer label = labelColor();
+                if (label != null) param.args[0] = label;
             }
         };
         // Most OEM launchers fork Launcher3 without renaming its classes, but some (ZTE's
         // included) do rename a few; try the known variants and silently skip the ones a given
         // launcher doesn't have (hook() already logs and swallows the "class not found" case).
+        // Workspace icons usually get their color from the theme (android:textColor, applied in
+        // the constructor) or through the ColorStateList overload, never calling
+        // setTextColor(int); so also replace the ColorStateList one, and correct the color
+        // right before every draw.
+        XC_MethodHook labelListHook = new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                View view = (View) param.thisObject;
+                requestedLabelColors.put(view, 0);
+                startWatchingHome(view.getContext());
+                Integer color = labelColor();
+                if (color != null) param.args[0] = ColorStateList.valueOf(color);
+            }
+        };
+        XC_MethodHook labelDrawHook = new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                TextView view = (TextView) param.thisObject;
+                if (!requestedLabelColors.containsKey(view)) {
+                    requestedLabelColors.put(view, view.getCurrentTextColor());
+                    startWatchingHome(view.getContext());
+                }
+                Integer color = labelColor();
+                if (color != null && view.getCurrentTextColor() != color) view.setTextColor(color);
+            }
+        };
         for (String className : LAUNCHER3_BUBBLE_TEXT_VIEW_CANDIDATES) {
             hook(className, classLoader, "setTextColor", int.class, labelHook);
+            hook(className, classLoader, "setTextColor", ColorStateList.class, labelListHook);
+            hook(className, classLoader, "onDraw", Canvas.class, labelDrawHook);
         }
+    }
+
+    /** Cached label color; re-read from the settings only when the wallpaper or settings change. */
+    private static volatile Integer cachedLabelColor;
+    private static volatile Boolean cachedLabelHint;
+
+    /** The app label color for the current wallpaper, or null to keep the launcher's own. */
+    private static Integer labelColor() {
+        Boolean dark = homeDarkText;
+        if (dark == null) return null;
+        if (cachedLabelColor == null || !dark.equals(cachedLabelHint)) {
+            cachedLabelColor = dark ? Settings.labelDark() : Settings.labelLight();
+            cachedLabelHint = dark;
+        }
+        return cachedLabelColor;
     }
 
     /** The home status bar icon color: the user's override, else the wallpaper's own hint. */
@@ -122,8 +169,9 @@ public class LauncherStatusBarHook implements IXposedHookLoadPackage {
         if (homeWatching) return;
         homeWatching = true;
         homeDarkText = darkTextHint(context, WallpaperManager.FLAG_SYSTEM);
-        watch(context, WallpaperManager.FLAG_SYSTEM, () -> {
+        Runnable refresh = () -> {
             homeDarkText = darkTextHint(context, WallpaperManager.FLAG_SYSTEM);
+            cachedLabelColor = null; // the settings may have changed too
             Boolean statusDark = effectiveHomeStatusDark();
             if (statusDark != null) {
                 for (Map.Entry<View, Integer> e : new ArrayList<>(requestedFlags.entrySet())) {
@@ -134,13 +182,29 @@ public class LauncherStatusBarHook implements IXposedHookLoadPackage {
                     }
                 }
             }
-            if (homeDarkText != null) {
-                int labelColor = homeDarkText ? Settings.labelDark() : Settings.labelLight();
+            Integer labelColor = labelColor();
+            if (labelColor != null) {
                 for (View v : new ArrayList<>(requestedLabelColors.keySet())) {
                     if (v instanceof TextView && v.isAttachedToWindow()) ((TextView) v).setTextColor(labelColor);
                 }
             }
-        });
+        };
+        watch(context, WallpaperManager.FLAG_SYSTEM, refresh);
+        onSettingsChanged(context, refresh);
+    }
+
+    /** Runs [onChange] on the main thread when {@link SettingsActivity} saves new colors. */
+    private static void onSettingsChanged(Context context, Runnable onChange) {
+        try {
+            context.getApplicationContext().registerReceiver(new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context c, Intent intent) {
+                    onChange.run();
+                }
+            }, new IntentFilter(Settings.ACTION_CHANGED), null, new Handler(Looper.getMainLooper()), Context.RECEIVER_EXPORTED);
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + "can't watch settings: " + t);
+        }
     }
 
     // endregion
@@ -211,6 +275,7 @@ public class LauncherStatusBarHook implements IXposedHookLoadPackage {
             lockDarkText = lockScreenHint(context);
             replayLockScreen();
         });
+        onSettingsChanged(context, LauncherStatusBarHook::replayLockScreen);
     }
 
     private static Boolean lockHint() {

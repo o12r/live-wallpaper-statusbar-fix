@@ -4,12 +4,15 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -18,6 +21,8 @@ import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import de.robv.android.xposed.XSharedPreferences;
 
 /**
  * Lets the user customize every color this module can apply, instead of the hard-coded
@@ -42,6 +47,15 @@ public class SettingsActivity extends Activity {
         root.setPadding(pad, pad, pad, pad);
         scroll.addView(root);
         setContentView(scroll);
+
+        // targetSdk 36 forces edge-to-edge: without this, the first rows are drawn under the
+        // status bar / title and are unreachable.
+        scroll.setOnApplyWindowInsetsListener((v, insets) -> {
+            Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
+            root.setPadding(pad, pad + bars.top, pad, pad + bars.bottom);
+            return insets;
+        });
+        scroll.setFitsSystemWindows(true);
 
         addHeader(root, getString(R.string.section_home_status));
         homeModeGroup = new RadioGroup(this);
@@ -89,6 +103,10 @@ public class SettingsActivity extends Activity {
                     .putInt("label_dark", colorOf(labelDark))
                     .putInt("label_light", colorOf(labelLight))
                     .apply();
+            // Without this, the file stays readable only by this app and every hooked process
+            // (launcher, System UI) silently falls back to the defaults — the settings above
+            // would look saved here but never actually apply anywhere.
+            new XSharedPreferences(Settings.PACKAGE, Settings.PREFS_NAME).makeWorldReadable();
             Toast.makeText(this, R.string.saved, Toast.LENGTH_SHORT).show();
         });
         root.addView(save);
@@ -97,7 +115,7 @@ public class SettingsActivity extends Activity {
     private void addRadio(RadioGroup group, String label) {
         RadioButton rb = new RadioButton(this);
         rb.setText(label);
-        rb.setId(android.view.View.generateViewId());
+        rb.setId(View.generateViewId());
         group.addView(rb);
     }
 

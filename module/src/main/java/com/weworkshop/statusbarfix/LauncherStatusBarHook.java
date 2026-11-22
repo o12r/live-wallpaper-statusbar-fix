@@ -50,7 +50,10 @@ public class LauncherStatusBarHook implements IXposedHookLoadPackage {
     private static final String SYSTEMUI = "com.android.systemui";
     private static final String ZTE_KEYGUARD_ICONS = "com.zte.mifavor.policy.KeyguardDarkIconDispatcher";
     private static final String ZTE_KEYGUARD_STYLE = "com.zte.mifavor.keyguard.MfvKeyguardStyle";
-    private static final String LAUNCHER3_BUBBLE_TEXT_VIEW = "com.android.launcher3.BubbleTextView";
+    private static final String[] LAUNCHER3_BUBBLE_TEXT_VIEW_CANDIDATES = {
+            "com.android.launcher3.BubbleTextView",
+            "com.zte.mifavor.launcher.BubbleTextView",
+    };
     private static final int LIGHT_STATUS_BAR = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
 
     @Override
@@ -87,7 +90,7 @@ public class LauncherStatusBarHook implements IXposedHookLoadPackage {
                 if (dark != null) param.args[0] = dark ? (flags | LIGHT_STATUS_BAR) : (flags & ~LIGHT_STATUS_BAR);
             }
         });
-        hook(LAUNCHER3_BUBBLE_TEXT_VIEW, classLoader, "setTextColor", int.class, new XC_MethodHook() {
+        XC_MethodHook labelHook = new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {
                 View view = (View) param.thisObject;
@@ -98,7 +101,13 @@ public class LauncherStatusBarHook implements IXposedHookLoadPackage {
                     param.args[0] = homeDarkText ? Settings.labelDark() : Settings.labelLight();
                 }
             }
-        });
+        };
+        // Most OEM launchers fork Launcher3 without renaming its classes, but some (ZTE's
+        // included) do rename a few; try the known variants and silently skip the ones a given
+        // launcher doesn't have (hook() already logs and swallows the "class not found" case).
+        for (String className : LAUNCHER3_BUBBLE_TEXT_VIEW_CANDIDATES) {
+            hook(className, classLoader, "setTextColor", int.class, labelHook);
+        }
     }
 
     /** The home status bar icon color: the user's override, else the wallpaper's own hint. */

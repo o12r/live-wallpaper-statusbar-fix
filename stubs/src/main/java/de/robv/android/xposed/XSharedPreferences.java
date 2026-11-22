@@ -14,6 +14,10 @@ public class XSharedPreferences {
         throw new UnsupportedOperationException("stub");
     }
 
+    public void makeWorldReadable() {
+        throw new UnsupportedOperationException("stub");
+    }
+
     public boolean hasFileChanged() {
         throw new UnsupportedOperationException("stub");
     }

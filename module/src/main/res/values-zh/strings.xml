@@ -1,5 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">动态壁纸状态栏修复</string>
-    <string name="xposed_description">让桌面的状态栏图标颜色跟随动态壁纸自带的深色/浅色文字提示（适用于中兴 MiFavor 等忽略该提示的桌面）。作用域请勾选系统桌面（主屏幕）和系统界面（锁屏）。</string>
+    <string name="xposed_description">让桌面的状态栏图标、锁屏以及桌面应用名文字颜色跟随动态壁纸自带的深色/浅色文字提示（适用于中兴 MiFavor 等忽略该提示的桌面），且每一项颜色均可自定义。作用域请勾选系统桌面（主屏幕）和系统界面（锁屏）。</string>
+
+    <string name="settings_title">状态栏修复设置</string>
+    <string name="section_home_status">桌面状态栏图标</string>
+    <string name="section_lock_status">锁屏状态栏图标</string>
+    <string name="section_lock_content">锁屏时钟与小部件</string>
+    <string name="section_label">桌面应用名文字</string>
+    <string name="mode_auto">跟随壁纸（默认）</string>
+    <string name="mode_dark">始终使用深色图标</string>
+    <string name="mode_light">始终使用浅色图标</string>
+    <string name="color_dark">浅色壁纸（深色文字）时使用的颜色</string>
+    <string name="color_light">深色壁纸（浅色文字）时使用的颜色</string>
+    <string name="color_dialog_title">输入颜色（#AARRGGBB 或 #RRGGBB）</string>
+    <string name="hex_hint">例如 #FF000000</string>
+    <string name="invalid_color">颜色格式不正确</string>
+    <string name="save">保存</string>
+    <string name="saved">设置已保存</string>
 </resources>

@@ -1,10 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Live Wallpaper Status Bar Fix</string>
-    <string name="xposed_description">Makes the launcher’s status bar icons follow a live wallpaper’s dark/light text hint (for launchers like ZTE MiFavor that ignore it). Enable it for the system launcher (home screen) and System UI (lock screen).</string>
+    <string name="xposed_description">Makes the launcher’s status bar icons, lock screen and desktop app label text follow a live wallpaper’s dark/light text hint (for launchers like ZTE MiFavor that ignore it), with every color customizable. Enable it for the system launcher (home screen) and System UI (lock screen).</string>
+
+    <string name="settings_title">Status Bar Fix Settings</string>
+    <string name="section_home_status">Home screen status bar icons</string>
+    <string name="section_lock_status">Lock screen status bar icons</string>
+    <string name="section_lock_content">Lock screen clock &amp; widgets</string>
+    <string name="section_label">Desktop app label text</string>
+    <string name="mode_auto">Follow the wallpaper (default)</string>
+    <string name="mode_dark">Always dark icons</string>
+    <string name="mode_light">Always light icons</string>
+    <string name="color_dark">Color on a light (dark-text) wallpaper</string>
+    <string name="color_light">Color on a dark (light-text) wallpaper</string>
+    <string name="color_dialog_title">Enter a color (#AARRGGBB or #RRGGBB)</string>
+    <string name="hex_hint">e.g. #FF000000</string>
+    <string name="invalid_color">Not a valid color</string>
+    <string name="save">Save</string>
+    <string name="saved">Settings saved</string>
 
     <string-array name="xposed_scope">
         <item>com.zte.mifavor.launcher</item>
+        <item>com.android.launcher3</item>
+        <item>com.google.android.apps.nexuslauncher</item>
         <item>com.android.systemui</item>
     </string-array>
 </resources>

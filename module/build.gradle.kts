@@ -16,8 +16,8 @@ android {
         applicationId = "com.weworkshop.statusbarfix"
         minSdk = 31 // WallpaperColors.getColorHints()
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "1.3.0"
     }
 
     // Release signing comes from ../keystore.properties (git-ignored). Without it, release

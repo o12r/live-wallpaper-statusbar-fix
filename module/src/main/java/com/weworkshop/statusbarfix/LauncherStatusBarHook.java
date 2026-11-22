@@ -6,6 +6,7 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
+import android.widget.TextView;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -20,8 +21,9 @@ import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 /**
- * Makes the status bar follow a live wallpaper's own dark/light text hint
- * ({@link WallpaperColors#HINT_SUPPORTS_DARK_TEXT}) on the home screen and the lock screen.
+ * Makes the status bar, the lock screen and the desktop app label text follow a live wallpaper's
+ * own dark/light text hint ({@link WallpaperColors#HINT_SUPPORTS_DARK_TEXT}), with every color
+ * configurable from {@link SettingsActivity}.
  *
  * <p>ZTE MiFavor ignores that hint for live wallpapers: the launcher judges the color from a
  * screenshot of one frame and resets it to the theme default when the workspace rebinds, and the
@@ -29,13 +31,18 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
  * unreadable status bar text. Static wallpapers are left to the system, which handles them.
  *
  * <ul>
- *   <li>Launcher process: Launcher3-based launchers apply the color with
+ *   <li>Launcher process: Launcher3-based launchers apply the status bar color with
  *   {@link View#setSystemUiVisibility(int)} on their window's root view, so the
- *   light-status-bar flag is adjusted there.</li>
+ *   light-status-bar flag is adjusted there (home screen status bar icons are a system flag,
+ *   not an arbitrary color, so {@link SettingsActivity} only lets the user force it to always
+ *   dark/light instead of following the wallpaper). The desktop app label text is set through
+ *   {@code com.android.launcher3.BubbleTextView#setTextColor(int)}, present in Launcher3 and its
+ *   many OEM forks, so that hook works beyond ZTE MiFavor.</li>
  *   <li>SystemUI process: ZTE's lock screen sets its status bar color through
  *   {@code KeyguardDarkIconDispatcher.setKeyguardStatusBarForeColor} and the color of its clock,
- *   widgets and shortcuts through {@code MfvKeyguardStyle.setColor}; both are replaced with dark
- *   or light (except on the always-on display, or when the user picked a clock color).</li>
+ *   widgets and shortcuts through {@code MfvKeyguardStyle.setColor}; both are replaced with the
+ *   user's configured dark or light color (except on the always-on display, or when the user
+ *   picked a clock color).</li>
  * </ul>
  */
 public class LauncherStatusBarHook implements IXposedHookLoadPackage {
@@ -43,11 +50,8 @@ public class LauncherStatusBarHook implements IXposedHookLoadPackage {
     private static final String SYSTEMUI = "com.android.systemui";
     private static final String ZTE_KEYGUARD_ICONS = "com.zte.mifavor.policy.KeyguardDarkIconDispatcher";
     private static final String ZTE_KEYGUARD_STYLE = "com.zte.mifavor.keyguard.MfvKeyguardStyle";
+    private static final String LAUNCHER3_BUBBLE_TEXT_VIEW = "com.android.launcher3.BubbleTextView";
     private static final int LIGHT_STATUS_BAR = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-    private static final int DARK_FORE = 0xFF000000;
-    private static final int LIGHT_FORE = 0xFFFFFFFF;
-    /** ZTE's dark lock screen content color (see ColorUtils.computeForeColor). */
-    private static final int DARK_CONTENT = 0xA6000000;
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
@@ -55,40 +59,77 @@ public class LauncherStatusBarHook implements IXposedHookLoadPackage {
         if (SYSTEMUI.equals(lpparam.packageName)) {
             hookLockScreen(lpparam.classLoader);
         } else {
-            hookLauncher();
+            hookLauncher(lpparam.classLoader);
         }
         XposedBridge.log(TAG + "loaded in " + lpparam.packageName);
     }
 
     // region launcher (home screen)
 
-    /** true = dark icons, false = light icons, null = leave the launcher's choice alone. */
+    /** The live wallpaper's current dark-text hint for the home screen, or null while unknown. */
     private static volatile Boolean homeDarkText;
-    private static boolean homeListening;
+    private static boolean homeWatching;
     /** Root views the launcher styled, with the flags it asked for (before our change). */
-    private static final Map<View, Integer> requested = new WeakHashMap<>();
+    private static final Map<View, Integer> requestedFlags = new WeakHashMap<>();
+    /** App label views, with the color the launcher asked for (before our change). */
+    private static final Map<View, Integer> requestedLabelColors = new WeakHashMap<>();
 
-    private static void hookLauncher() {
+    private static void hookLauncher(ClassLoader classLoader) {
         XposedHelpers.findAndHookMethod(View.class, "setSystemUiVisibility", int.class, new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {
                 View view = (View) param.thisObject;
                 if (view.getRootView() != view) return; // only the window's own flags
                 int flags = (Integer) param.args[0];
-                requested.put(view, flags);
-                if (!homeListening) {
-                    homeListening = true;
-                    watch(view.getContext(), WallpaperManager.FLAG_SYSTEM, () -> {
-                        homeDarkText = darkTextHint(view.getContext(), WallpaperManager.FLAG_SYSTEM);
-                        for (Map.Entry<View, Integer> e : new ArrayList<>(requested.entrySet())) {
-                            View v = e.getKey();
-                            if (v != null && v.isAttachedToWindow()) v.setSystemUiVisibility(e.getValue());
-                        }
-                    });
-                    homeDarkText = darkTextHint(view.getContext(), WallpaperManager.FLAG_SYSTEM);
-                }
-                Boolean dark = homeDarkText;
+                requestedFlags.put(view, flags);
+                startWatchingHome(view.getContext());
+                Boolean dark = effectiveHomeStatusDark();
                 if (dark != null) param.args[0] = dark ? (flags | LIGHT_STATUS_BAR) : (flags & ~LIGHT_STATUS_BAR);
+            }
+        });
+        hook(LAUNCHER3_BUBBLE_TEXT_VIEW, classLoader, "setTextColor", int.class, new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                View view = (View) param.thisObject;
+                int color = (Integer) param.args[0];
+                requestedLabelColors.put(view, color);
+                startWatchingHome(view.getContext());
+                if (homeDarkText != null) {
+                    param.args[0] = homeDarkText ? Settings.labelDark() : Settings.labelLight();
+                }
+            }
+        });
+    }
+
+    /** The home status bar icon color: the user's override, else the wallpaper's own hint. */
+    private static Boolean effectiveHomeStatusDark() {
+        int mode = Settings.homeStatusMode();
+        if (mode == Settings.HOME_STATUS_DARK) return true;
+        if (mode == Settings.HOME_STATUS_LIGHT) return false;
+        return homeDarkText;
+    }
+
+    private static void startWatchingHome(Context context) {
+        if (homeWatching) return;
+        homeWatching = true;
+        homeDarkText = darkTextHint(context, WallpaperManager.FLAG_SYSTEM);
+        watch(context, WallpaperManager.FLAG_SYSTEM, () -> {
+            homeDarkText = darkTextHint(context, WallpaperManager.FLAG_SYSTEM);
+            Boolean statusDark = effectiveHomeStatusDark();
+            if (statusDark != null) {
+                for (Map.Entry<View, Integer> e : new ArrayList<>(requestedFlags.entrySet())) {
+                    View v = e.getKey();
+                    int flags = e.getValue();
+                    if (v != null && v.isAttachedToWindow()) {
+                        v.setSystemUiVisibility(statusDark ? (flags | LIGHT_STATUS_BAR) : (flags & ~LIGHT_STATUS_BAR));
+                    }
+                }
+            }
+            if (homeDarkText != null) {
+                int labelColor = homeDarkText ? Settings.labelDark() : Settings.labelLight();
+                for (View v : new ArrayList<>(requestedLabelColors.keySet())) {
+                    if (v instanceof TextView && v.isAttachedToWindow()) ((TextView) v).setTextColor(labelColor);
+                }
             }
         });
     }
@@ -106,23 +147,23 @@ public class LauncherStatusBarHook implements IXposedHookLoadPackage {
     private static final Map<Method, Object> lastTargets = new java.util.HashMap<>();
 
     private static void hookLockScreen(ClassLoader classLoader) {
-        // Status bar icons: black or white.
+        // Status bar icons.
         XC_MethodHook statusBar = new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {
                 remember(param);
                 Boolean dark = lockHint();
-                if (dark != null) param.args[0] = dark ? DARK_FORE : LIGHT_FORE;
+                if (dark != null) param.args[0] = dark ? Settings.lockStatusDark() : Settings.lockStatusLight();
             }
         };
-        // Clock, date, lock screen widgets, shortcuts and other content: ZTE uses 65% black for dark.
+        // Clock, date, lock screen widgets, shortcuts and other content.
         XC_MethodHook content = new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {
                 remember(param);
                 if (dozing || userPickedClockColor()) return;
                 Boolean dark = lockHint();
-                if (dark != null) param.args[0] = dark ? DARK_CONTENT : LIGHT_FORE;
+                if (dark != null) param.args[0] = dark ? Settings.lockContentDark() : Settings.lockContentLight();
             }
         };
         XC_MethodHook dozingState = new XC_MethodHook() {
